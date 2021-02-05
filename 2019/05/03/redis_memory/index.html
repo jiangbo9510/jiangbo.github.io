@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.3.0">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+<link rel="stylesheet" href="/lib/font-awesome/css/all.min.css">
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"jiangbo9510.github.io","root":"/","scheme":"Muse","version":"7.8.0","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":false,"show_result":false,"style":null},"back2top":{"enable":true,"sidebar":false,"scrollpercent":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":false,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":false,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}}};
+  </script>
+
+  <meta name="description" content="redis一个大list拆分为N个小list用压缩列表保存，可以更省内存。 列表对象保存的所有字符串元素的长度都小于64字节； 列表对象保存的元素数量小于512个；  下面将举例说明。">
+<meta property="og:type" content="article">
+<meta property="og:title" content="redis的内存优化">
+<meta property="og:url" content="https://jiangbo9510.github.io/2019/05/03/redis_memory/index.html">
+<meta property="og:site_name" content="江波的blog">
+<meta property="og:description" content="redis一个大list拆分为N个小list用压缩列表保存，可以更省内存。 列表对象保存的所有字符串元素的长度都小于64字节； 列表对象保存的元素数量小于512个；  下面将举例说明。">
+<meta property="og:locale">
+<meta property="og:image" content="http://ww1.sinaimg.cn/large/ea3ade00gy1g2obm7jh6xj206601fq2p.jpg">
+<meta property="og:image" content="http://ww1.sinaimg.cn/large/ea3ade00gy1g2obncrsd5j208001a0si.jpg">
+<meta property="og:image" content="http://ww1.sinaimg.cn/large/ea3ade00gy1g2obqrgqakj209s057wee.jpg">
+<meta property="og:image" content="http://ww1.sinaimg.cn/large/ea3ade00gy1g2obocvpl8j206q047jr9.jpg">
+<meta property="og:image" content="http://ww1.sinaimg.cn/large/ea3ade00gy1g2ocbgf1rrj2068017mwx.jpg">
+<meta property="og:image" content="http://ww1.sinaimg.cn/large/ea3ade00gy1g2occrgj6fj20cv0b0t8v.jpg">
+<meta property="og:image" content="http://ww1.sinaimg.cn/large/ea3ade00gy1g2ocbv77kej207i04fq2t.jpg">
+<meta property="og:image" content="http://gameweb-img.qq.com/gad/20170727/519ce13cec1d52deda9c1ce5489298b4.1501147736.png">
+<meta property="article:published_time" content="2019-05-02T16:00:00.000Z">
+<meta property="article:modified_time" content="2019-05-03T11:46:36.031Z">
+<meta property="article:author" content="bojiang">
+<meta property="article:tag" content="redis">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="http://ww1.sinaimg.cn/large/ea3ade00gy1g2obm7jh6xj206601fq2p.jpg">
+
+<link rel="canonical" href="https://jiangbo9510.github.io/2019/05/03/redis_memory/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'zh-Hans'
+  };
+</script>
+
+  <title>redis的内存优化 | 江波的blog</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">江波的blog</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a>
+
+  </li>
+  </ul>
+</nav>
+
+
+
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-Hans">
+    <link itemprop="mainEntityOfPage" href="https://jiangbo9510.github.io/2019/05/03/redis_memory/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="bojiang">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="江波的blog">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          redis的内存优化
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+              
+
+              <time title="Created: 2019-05-03 00:00:00 / Modified: 19:46:36" itemprop="dateCreated datePublished" datetime="2019-05-03T00:00:00+08:00">2019-05-03</time>
+            </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/2019/" itemprop="url" rel="index"><span itemprop="name">2019</span></a>
+                </span>
+            </span>
+
+          
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <p>redis一个大list拆分为N个小list用压缩列表保存，可以更省内存。</p>
+<pre><code>列表对象保存的所有字符串元素的长度都小于64字节；
+列表对象保存的元素数量小于512个；
+</code></pre>
+<p>下面将举例说明。</p>
+<a id="more"></a>
+
+<h2 id="情况1、一个key，有很多64字节以内的value"><a href="#情况1、一个key，有很多64字节以内的value" class="headerlink" title="情况1、一个key，有很多64字节以内的value"></a>情况1、一个key，有很多64字节以内的value</h2><p>例如：</p>
+<p><img src="http://ww1.sinaimg.cn/large/ea3ade00gy1g2obm7jh6xj206601fq2p.jpg"></p>
+<pre><code>只有一个key
+</code></pre>
+<p><img src="http://ww1.sinaimg.cn/large/ea3ade00gy1g2obncrsd5j208001a0si.jpg"></p>
+<pre><code>该key对应的list有300w个value
+</code></pre>
+<p><img src="http://ww1.sinaimg.cn/large/ea3ade00gy1g2obqrgqakj209s057wee.jpg"></p>
+<pre><code>每个value都是小于64个字节的
+</code></pre>
+<p><img src="http://ww1.sinaimg.cn/large/ea3ade00gy1g2obocvpl8j206q047jr9.jpg"></p>
+<pre><code>在只有一个300w个value的key的情况下，内存占用约为263m
+</code></pre>
+<h2 id="情况2：将value分散到不同的key"><a href="#情况2：将value分散到不同的key" class="headerlink" title="情况2：将value分散到不同的key"></a>情况2：将value分散到不同的key</h2><p>将同样的3434114个value拆分到6800个key中，每个key存放500个value。</p>
+<p>数据如下：</p>
+<p><img src="http://ww1.sinaimg.cn/large/ea3ade00gy1g2ocbgf1rrj2068017mwx.jpg"></p>
+<pre><code>有6800+个key
+</code></pre>
+<p><img src="http://ww1.sinaimg.cn/large/ea3ade00gy1g2occrgj6fj20cv0b0t8v.jpg"></p>
+<pre><code>value和情况1是一致的
+</code></pre>
+<p><img src="http://ww1.sinaimg.cn/large/ea3ade00gy1g2ocbv77kej207i04fq2t.jpg"></p>
+<pre><code>消耗的内存只有55m
+</code></pre>
+<h2 id="原因分析"><a href="#原因分析" class="headerlink" title="原因分析"></a>原因分析</h2><p>情况1：</p>
+<p>列表的node的双向指针每个8个字节,指向redisObject的字符串的指针8个字节</p>
+<p>redisObeject消耗内存24个字节</p>
+<p>字符串以sds的方式存储，每个16个字节（含2*sizeof(int)+真实字符串长度）。</p>
+<p><img src="http://gameweb-img.qq.com/gad/20170727/519ce13cec1d52deda9c1ce5489298b4.1501147736.png"></p>
+<p>共消耗内存 = 350w*(24+24+16) = 224m</p>
+<p>情况2：</p>
+<p>已ziplist的形式存储，</p>
+<p>只消耗内存：</p>
+<p>6800*(500*(12+4) + 12) = 54m<br>其中6800位key的数量，500位每个key对应的value的数量，12位字符串长度，4位int大小，记录字符串长度，12位每个ziplist的消耗的内存</p>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/tags/redis/" rel="tag"># redis</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/2019/05/03/redis_network/" rel="prev" title="redis的网络">
+      <i class="fa fa-chevron-left"></i> redis的网络
+    </a></div>
+      <div class="post-nav-item">
+    <a href="/2019/05/03/escape_character/" rel="next" title="关于转义字符">
+      关于转义字符 <i class="fa fa-chevron-right"></i>
+    </a></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+          <div class="post-toc motion-element"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%83%85%E5%86%B51%E3%80%81%E4%B8%80%E4%B8%AAkey%EF%BC%8C%E6%9C%89%E5%BE%88%E5%A4%9A64%E5%AD%97%E8%8A%82%E4%BB%A5%E5%86%85%E7%9A%84value"><span class="nav-number">1.</span> <span class="nav-text">情况1、一个key，有很多64字节以内的value</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%83%85%E5%86%B52%EF%BC%9A%E5%B0%86value%E5%88%86%E6%95%A3%E5%88%B0%E4%B8%8D%E5%90%8C%E7%9A%84key"><span class="nav-number">2.</span> <span class="nav-text">情况2：将value分散到不同的key</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%8E%9F%E5%9B%A0%E5%88%86%E6%9E%90"><span class="nav-number">3.</span> <span class="nav-text">原因分析</span></a></li></ol></div>
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+  <p class="site-author-name" itemprop="name">bojiang</p>
+  <div class="site-description" itemprop="description"></div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">13</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+        <span class="site-state-item-count">2</span>
+        <span class="site-state-item-name">categories</span>
+      </div>
+      <div class="site-state-item site-state-tags">
+        <span class="site-state-item-count">7</span>
+        <span class="site-state-item-name">tags</span>
+      </div>
+  </nav>
+</div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+
+<div class="copyright">
+  
+  &copy; 
+  <span itemprop="copyrightYear">2021</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">bojiang</span>
+</div>
+  <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://muse.theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Muse</a>
+  </div>
+
+        
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+<script src="/js/motion.js"></script>
+
+
+<script src="/js/schemes/muse.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+</body>
+</html>

@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.3.0">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+<link rel="stylesheet" href="/lib/font-awesome/css/all.min.css">
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"jiangbo9510.github.io","root":"/","scheme":"Muse","version":"7.8.0","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":false,"show_result":false,"style":null},"back2top":{"enable":true,"sidebar":false,"scrollpercent":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":false,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":false,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}}};
+  </script>
+
+  <meta name="description" content="1、socket与缓存区http:&#x2F;&#x2F;c.biancheng.net&#x2F;cpp&#x2F;html&#x2F;3040.html epoll的ET触发并非缓存区可读可写，而是有新的网络IO事件。如果没有完全读取完毕而返回导致缓存区一直有数据可读。则只能等到下一次有网络IO时间的时候才能读取到。">
+<meta property="og:type" content="article">
+<meta property="og:title" content="epoll与阻塞非阻塞">
+<meta property="og:url" content="https://jiangbo9510.github.io/2019/05/12/epoll/index.html">
+<meta property="og:site_name" content="江波的blog">
+<meta property="og:description" content="1、socket与缓存区http:&#x2F;&#x2F;c.biancheng.net&#x2F;cpp&#x2F;html&#x2F;3040.html epoll的ET触发并非缓存区可读可写，而是有新的网络IO事件。如果没有完全读取完毕而返回导致缓存区一直有数据可读。则只能等到下一次有网络IO时间的时候才能读取到。">
+<meta property="og:locale">
+<meta property="article:published_time" content="2019-05-11T16:00:00.000Z">
+<meta property="article:modified_time" content="2019-05-12T10:42:42.731Z">
+<meta property="article:author" content="bojiang">
+<meta property="article:tag" content="epoll">
+<meta name="twitter:card" content="summary">
+
+<link rel="canonical" href="https://jiangbo9510.github.io/2019/05/12/epoll/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'zh-Hans'
+  };
+</script>
+
+  <title>epoll与阻塞非阻塞 | 江波的blog</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">江波的blog</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a>
+
+  </li>
+  </ul>
+</nav>
+
+
+
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-Hans">
+    <link itemprop="mainEntityOfPage" href="https://jiangbo9510.github.io/2019/05/12/epoll/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="bojiang">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="江波的blog">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          epoll与阻塞非阻塞
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+              
+
+              <time title="Created: 2019-05-12 00:00:00 / Modified: 18:42:42" itemprop="dateCreated datePublished" datetime="2019-05-12T00:00:00+08:00">2019-05-12</time>
+            </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/2019/" itemprop="url" rel="index"><span itemprop="name">2019</span></a>
+                </span>
+            </span>
+
+          
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <h1 id="1、socket与缓存区"><a href="#1、socket与缓存区" class="headerlink" title="1、socket与缓存区"></a>1、socket与缓存区</h1><p><a target="_blank" rel="noopener" href="http://c.biancheng.net/cpp/html/3040.html">http://c.biancheng.net/cpp/html/3040.html</a></p>
+<p>epoll的ET触发并非缓存区可读可写，而是有新的网络IO事件。如果没有完全读取完毕而返回导致缓存区一直有数据可读。则只能等到下一次有网络IO时间的时候才能读取到。</p>
+<a id="more"></a>
+
+<h1 id="2、阻塞与非阻塞的网络fd"><a href="#2、阻塞与非阻塞的网络fd" class="headerlink" title="2、阻塞与非阻塞的网络fd"></a>2、阻塞与非阻塞的网络fd</h1><p>阻塞与非阻塞是针对fd而言：</p>
+<ul>
+<li><p>阻塞的fd在read不到数据的时候，会一直等待。</p>
+</li>
+<li><p>在非阻塞的fd中，如果输入操作不能被满足（对于TCP套接口即至少有一个字节的数据可读，对于UDP套接口即有一个完整的数据报可读），则返回-1，并且，设置errno为EWOULDBLOCK错误</p>
+</li>
+</ul>
+<h2 id="2-1、read-and-write"><a href="#2-1、read-and-write" class="headerlink" title="2.1、read and write"></a>2.1、read and write</h2><p>1、当read()或者write()函数返回值大于0时，表示实际从缓冲区读取或者写入的字节数目</p>
+<p>2、</p>
+<ul>
+<li><p>当read()函数返回值为0时，表示对端已经关闭了 socket，这时候也要关闭这个socket，否则会导致socket泄露。netstat命令查看下，如果有closewait状态的socket,就是socket泄露了</p>
+</li>
+<li><p>当write()函数返回0时，表示当前写缓冲区已满，是正常情况，下次再来写就行了。</p>
+</li>
+</ul>
+<p>3、当read()或者write()返回-1时，一般要判断errno</p>
+<ul>
+<li><p>如果errno == EINTR,表示系统当前中断了，直接忽略</p>
+</li>
+<li><p>如果errno == EAGAIN或者EWOULDBLOCK，非阻塞socket直接忽略</p>
+</li>
+<li><p>如果是阻塞的socket,一般是读写操作超时了，还未返回。这个超时是指socket的SO_RCVTIMEO与SO_SNDTIMEO两个属性</p>
+</li>
+</ul>
+<p>ps：read函数读取到缓存区的数据就会返回，不论参数的设置的大小或者fd是否阻塞</p>
+<p>所以在使用阻塞socket时，不要将超时时间设置的过小。不然返回了-1，你也不知道是socket连接是真的断开了，还是正常的网络抖动。</p>
+<p>一般情况下，阻塞的socket返回了-1，都需要关闭重新连接。</p>
+<p>以上部分摘取自：<a target="_blank" rel="noopener" href="https://www.cnblogs.com/myd620/p/6219994.html">https://www.cnblogs.com/myd620/p/6219994.html</a></p>
+<h2 id="2-2、accept"><a href="#2-2、accept" class="headerlink" title="2.2、accept"></a>2.2、accept</h2><p>1、在accept新连接时，建议以非阻塞的方式监听listenfd：如果在触发accept可读的同时，客户端请求关闭连接，此时，此时，会将将其从等待连接的队列中删除，如果队列为空，accept阻塞，直到有新的连接</p>
+<p>2、在后续的accept调用中忽略以下错误：EWOULDBLOCK（源自Berkeley的实现，客户终止连接时），ECONNABORTED（POSIX实现，客户终止连接时），EPROTO（SVR4实现，客户终止连接时）和EINTR（如果有信号被捕获）</p>
+<p>3、使用举例</p>
+<pre><code>while ((conn_sock = accept(listenfd,(struct sockaddr *) &amp;remote,   
+            (size_t *)&amp;addrlen)) &gt; 0) &#123;  
+handle_client(conn_sock);  
+&#125;  
+if (conn_sock == -1) &#123;  
+    if (errno != EAGAIN &amp;&amp; errno != ECONNABORTED   
+            &amp;&amp; errno != EPROTO &amp;&amp; errno != EINTR)   
+        perror(&quot;accept&quot;);  
+&#125;  
+</code></pre>
+<h2 id="2-3、问题"><a href="#2-3、问题" class="headerlink" title="2.3、问题"></a>2.3、问题</h2><p>阻塞的FD为什么被SELECT OR EPOLL触发可读后，读取的时候还是可能会被阻塞？</p>
+<p>以读为例：在多路复用中，被SELECT OR EPOLL触发可读后，但是被协议栈检查报文错误，则该报文被丢弃。其实是不可读的，此时线程OR进程会被卡在READ函数处。</p>
+<p>对于非阻塞的套接口，如果输入操作不能被满足（对于TCP套接口即至少有一个字节的数据可读，对于UDP套接口即有一个完整的数据报可读）</p>
+<h1 id="3、epoll使用举例"><a href="#3、epoll使用举例" class="headerlink" title="3、epoll使用举例"></a>3、epoll使用举例</h1><p>1、LT配合非阻塞的fd，见 redis的非阻塞网络模型</p>
+<p>2、LT配合阻塞的fd，由于2.2的原因，一般不用多路复用中一般不用阻塞的fd</p>
+<pre><code>        /* read call happens here */
+        if ((nbytes = read(i, buf, sizeof(buf))) &gt;= 0) &#123;
+            handle_read(nbytes, buf);
+        &#125; else &#123;
+            /* real version needs to handle EINTR correctly */
+            perror(&quot;read&quot;);
+            exit(EXIT_FAILURE);
+        &#125;
+</code></pre>
+<p>3、ET模式一般不和阻塞的fd一起使用，理由如下：</p>
+<blockquote>
+<p>只说读的情况：<br>ET只有来数据时才会提醒，因此读数据时，你必须一次性地把缓冲区的数据读完（如果不读完，则缓冲区还残留着未读数据，然后对端又不继续发数据的话，ET是不会再通知你，也就是说你将永远读不到残留数据）为了一次性把缓冲区数据读完，你必须要写一个while循环来read，直到缓冲区里面数据被读完</p>
+<p>如果设成阻塞的话，你的程序就无法知道数据什么时候被读完，因为当数据读完时，会卡在while里面的read，一直在等数据，永远退不出while</p>
+<p>如果设成非阻塞，当数据被读完，read就会返回，然后将errno设成EAGAIN并退出while，这才是正确的逻辑</p>
+</blockquote>
+<p>4、ET配合非阻塞的fd：</p>
+<pre><code>n = 0;
+while ((nread = read (sockfd, buf + n, BUFSIZ - 1)) &gt; 0)
+&#123;
+    n += nread;
+&#125;
+if (nread == -1 &amp;&amp; errno != EAGAIN)
+&#123;
+perror (&quot;read error&quot;);
+</code></pre>
+<p>需要一直读取，直到返回-1。</p>
+<p>如果I/O数据量很大，可能在读取数据的过程中其他文件得不到处理，造成饥饿。解决方法是维护一个就绪列表，在关联数据结构中标记文件描述符为就绪状态，由此可以记住哪些文件在等待，并对所有就绪文件作轮转处理。</p>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/tags/epoll/" rel="tag"># epoll</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/2019/05/12/redis_unblocked/" rel="prev" title="redis的非阻塞网络模型">
+      <i class="fa fa-chevron-left"></i> redis的非阻塞网络模型
+    </a></div>
+      <div class="post-nav-item">
+    <a href="/2019/05/26/mysql_master_slave_replication/" rel="next" title="mysql的主从复制">
+      mysql的主从复制 <i class="fa fa-chevron-right"></i>
+    </a></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+          <div class="post-toc motion-element"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#1%E3%80%81socket%E4%B8%8E%E7%BC%93%E5%AD%98%E5%8C%BA"><span class="nav-number">1.</span> <span class="nav-text">1、socket与缓存区</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#2%E3%80%81%E9%98%BB%E5%A1%9E%E4%B8%8E%E9%9D%9E%E9%98%BB%E5%A1%9E%E7%9A%84%E7%BD%91%E7%BB%9Cfd"><span class="nav-number">2.</span> <span class="nav-text">2、阻塞与非阻塞的网络fd</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#2-1%E3%80%81read-and-write"><span class="nav-number">2.1.</span> <span class="nav-text">2.1、read and write</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#2-2%E3%80%81accept"><span class="nav-number">2.2.</span> <span class="nav-text">2.2、accept</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#2-3%E3%80%81%E9%97%AE%E9%A2%98"><span class="nav-number">2.3.</span> <span class="nav-text">2.3、问题</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#3%E3%80%81epoll%E4%BD%BF%E7%94%A8%E4%B8%BE%E4%BE%8B"><span class="nav-number">3.</span> <span class="nav-text">3、epoll使用举例</span></a></li></ol></div>
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+  <p class="site-author-name" itemprop="name">bojiang</p>
+  <div class="site-description" itemprop="description"></div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">13</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+        <span class="site-state-item-count">2</span>
+        <span class="site-state-item-name">categories</span>
+      </div>
+      <div class="site-state-item site-state-tags">
+        <span class="site-state-item-count">7</span>
+        <span class="site-state-item-name">tags</span>
+      </div>
+  </nav>
+</div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+
+<div class="copyright">
+  
+  &copy; 
+  <span itemprop="copyrightYear">2021</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">bojiang</span>
+</div>
+  <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://muse.theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Muse</a>
+  </div>
+
+        
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+<script src="/js/motion.js"></script>
+
+
+<script src="/js/schemes/muse.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+</body>
+</html>

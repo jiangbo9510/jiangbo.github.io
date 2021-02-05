@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.3.0">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+<link rel="stylesheet" href="/lib/font-awesome/css/all.min.css">
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"jiangbo9510.github.io","root":"/","scheme":"Muse","version":"7.8.0","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":false,"show_result":false,"style":null},"back2top":{"enable":true,"sidebar":false,"scrollpercent":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":false,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":false,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}}};
+  </script>
+
+  <meta name="description" content="1、binlog文件Binlog的日志格式可以在命令行中设置 show variables like &#39;%log%&#39;;        &#x2F;&#x2F;要重新登入一次才会看到该变量生效 set global binlog_format&#x3D;&#39;row&#39;&#x2F;&#39;statement&#39;&#x2F;&#39;mixed&#39;  binlog有三种格式：Statement, Row和Mix">
+<meta property="og:type" content="article">
+<meta property="og:title" content="mysql的主从复制">
+<meta property="og:url" content="https://jiangbo9510.github.io/2019/05/26/mysql_master_slave_replication/index.html">
+<meta property="og:site_name" content="江波的blog">
+<meta property="og:description" content="1、binlog文件Binlog的日志格式可以在命令行中设置 show variables like &#39;%log%&#39;;        &#x2F;&#x2F;要重新登入一次才会看到该变量生效 set global binlog_format&#x3D;&#39;row&#39;&#x2F;&#39;statement&#39;&#x2F;&#39;mixed&#39;  binlog有三种格式：Statement, Row和Mix">
+<meta property="og:locale">
+<meta property="og:image" content="http://static.zybuluo.com/abcdocker/j72dvg69mnf2kngiphe1cyd7/image_1bfc7lsuj9s111851lrh1osjv6s34.png">
+<meta property="og:image" content="http://ata2-img.cn-hangzhou.img-pub.aliyun-inc.com/4153fcafc3c14bfa7ff94770d41b49a5.png">
+<meta property="og:image" content="http://ata2-img.cn-hangzhou.img-pub.aliyun-inc.com/08b666b3acb193dc1a0aa5ca506a345c.png">
+<meta property="article:published_time" content="2019-05-25T16:00:00.000Z">
+<meta property="article:modified_time" content="2019-05-26T12:27:09.615Z">
+<meta property="article:author" content="bojiang">
+<meta property="article:tag" content="mysql">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="http://static.zybuluo.com/abcdocker/j72dvg69mnf2kngiphe1cyd7/image_1bfc7lsuj9s111851lrh1osjv6s34.png">
+
+<link rel="canonical" href="https://jiangbo9510.github.io/2019/05/26/mysql_master_slave_replication/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'zh-Hans'
+  };
+</script>
+
+  <title>mysql的主从复制 | 江波的blog</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">江波的blog</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a>
+
+  </li>
+  </ul>
+</nav>
+
+
+
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-Hans">
+    <link itemprop="mainEntityOfPage" href="https://jiangbo9510.github.io/2019/05/26/mysql_master_slave_replication/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="bojiang">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="江波的blog">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          mysql的主从复制
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+              
+
+              <time title="Created: 2019-05-26 00:00:00 / Modified: 20:27:09" itemprop="dateCreated datePublished" datetime="2019-05-26T00:00:00+08:00">2019-05-26</time>
+            </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/2019/" itemprop="url" rel="index"><span itemprop="name">2019</span></a>
+                </span>
+            </span>
+
+          
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <h1 id="1、binlog文件"><a href="#1、binlog文件" class="headerlink" title="1、binlog文件"></a>1、binlog文件</h1><p>Binlog的日志格式可以在命令行中设置</p>
+<pre><code>show variables like &#39;%log%&#39;;        //要重新登入一次才会看到该变量生效
+set global binlog_format=&#39;row&#39;/&#39;statement&#39;/&#39;mixed&#39;
+</code></pre>
+<p>binlog有三种格式：Statement, Row和Mixed.</p>
+<a id="more"></a>
+
+<ol>
+<li>基于SQL语句的复制（statement-based replication, SBR）</li>
+<li>基于行的复制（row-based replication, RBR）</li>
+<li>混合模式复制（mixed-based replication, MBR）,一般的语句修改使用statment格式保存binlog，如一些函数，statement无法完成主从复制的操作，则采用row格式保存binlog，MySQL会根据执行的每一条具体的sql语句来区分对待记录的日志形式，也就是在Statement和Row之间选择一</li>
+</ol>
+<p>通过命令</p>
+<pre><code>show binlog EVENTS in &quot;mysql-bin.000001&quot;;
+或者
+</code></pre>
+<p>可以查看binlog的具体sql内容</p>
+<p>具体内容如下：</p>
+<pre><code>BEGIN
+/*!*/;
+# at 4123
+#190526 19:04:08 server id 1  end_log_pos 4238 CRC32 0x0c948921     Table_map: `account_17_db`.`t_company_account_snap_2` mapped to number 72
+# at 4238
+#190526 19:04:08 server id 1  end_log_pos 4526 CRC32 0x76cdfa0a     Update_rows: table id 72 flags: STMT_END_F
+
+BINLOG &#39;
+qHLqXBMBAAAAcwAAAI4QAAAAAEgAAAAAAAEADWFjY291bnRfMTdfZGIAGHRfY29tcGFueV9hY2Nv
+dW50X3NuYXBfMgARCA8PDwH2EgP29vb2DxISCAEVYABgAMAAIAQAIAQgBCAEIAT9AgAAAAAAIYmU
+DA==
+qHLqXB8BAAAAIAEAAK4RAAAAAEgAAAAAAAEAAgAR////////AAD+AgAAAAAAAAADd3F3AAAAgAAA
+AAAAAAAAAAAAAAAAmQLCAAAAAAAAgAAAAAAAAAAAAAAAAAAAgAAAAAAAAAAAAAAAAAAAgAAAAAAA
+AAAAAAAAAAAAgAAAAAAAAAAAAAAAAAAAAACZAsIAAJkCwgAAAAAAAAAAAAAAAAD+AgAAAAAAAAAD
+d3F3AAJzZACAAAAAAAAAAAAAAAAAAACZAsIAAAAAAACAAAAAAAAAAAAAAAAAAACAAAAAAAAAAAAA
+AAAAAACAAAAAAAAAAAAAAAAAAACAAAAAAAAAAAAAAAAAAAAAAJkCwgAAmQLCAAAAAAAAAAAAAAAK
++s12
+&#39;/*!*/;
+# at 4526
+#190526 19:04:08 server id 1  end_log_pos 4557 CRC32 0x2abea70f     Xid = 139
+COMMIT/*!*/;
+# at 4557
+#190526 19:06:01 server id 1  end_log_pos 4654 CRC32 0xf30dd244     Query    thread_id=5    exec_time=0    error_code=0
+SET TIMESTAMP=1558868761/*!*/;
+BEGIN
+/*!*/;
+# at 4654
+#190526 19:06:01 server id 1  end_log_pos 4829 CRC32 0xc246c0a7     Query    thread_id=5    exec_time=0    error_code=0
+use `account_17_db`/*!*/;
+SET TIMESTAMP=1558868761/*!*/;
+UPDATE `t_company_account_snap_2` SET `Ftrans_id`=&#39;34&#39; WHERE (`Findex`=&#39;4&#39;) LIMIT 1
+/*!*/;
+# at 4829
+#190526 19:06:01 server id 1  end_log_pos 4860 CRC32 0x7f835a25     Xid = 151
+COMMIT/*!*/;
+</code></pre>
+<p>xid 139是按照行数据的形式存储的变更，xid 151则是按照statement存储的变更</p>
+<h1 id="2、主从同步的过程"><a href="#2、主从同步的过程" class="headerlink" title="2、主从同步的过程"></a>2、主从同步的过程</h1><p><img src="http://static.zybuluo.com/abcdocker/j72dvg69mnf2kngiphe1cyd7/image_1bfc7lsuj9s111851lrh1osjv6s34.png"></p>
+<p>主库执行sql，记录到二进制的文件中（记录的过程在事务中），从库启动一个工作线程，和主库建立客户端连接，主库也会启动二进制转储的线程，该转储线程读取binlog中的事件，发送到从库的线程中并接收从库的ack（串行）。如果已经追赶到了最新数据，该转储线程会休眠，等待主库有新事务后唤醒之。如果是一主多从的情况，主库对每个从库都有对应的线程。</p>
+<p>ps：5.7之后主库有专门的线程接收从库的ack</p>
+<p>从库的工作线程将收到的事件记录到中继日志中，从库的另外的sql线程会读取中继日志，并执行之。同时也会将该事件写入自己的binlog中。一个线程的执行可能会变为瓶颈</p>
+<h1 id="3、主从同步的方式"><a href="#3、主从同步的方式" class="headerlink" title="3、主从同步的方式"></a>3、主从同步的方式</h1><h2 id="1、语句复制"><a href="#1、语句复制" class="headerlink" title="1、语句复制"></a>1、语句复制</h2><p>在mysql 5.0之前只支持语句复制，将主库执行的sql在从库执行一次。</p>
+<p>   优点：简单，sql更新的数据量很大，但是sql的大小只有几个字节</p>
+<p>   缺点：无法完全还原主库的执行sql的环境，例如 CURRENT_USER()函数。并且sql在主从的执行时间不一样，5.1和5.2的mysql对触发器和存储过程的支持不够</p>
+<h2 id="2、行复制"><a href="#2、行复制" class="headerlink" title="2、行复制"></a>2、行复制</h2><p>将binlog中的行数据复制到从库</p>
+<p>   优点：可以覆盖任何场景的数据变更</p>
+<p>   缺点：看不出数据变更的逻辑</p>
+<h1 id="4、主从同步"><a href="#4、主从同步" class="headerlink" title="4、主从同步"></a>4、主从同步</h1><h2 id="1、异步复制："><a href="#1、异步复制：" class="headerlink" title="1、异步复制："></a>1、异步复制：</h2><ul>
+<li>MySQL的异步复制是MySQL自带的数据同步功能，在公司里面也是也就最为常见的。</li>
+<li>主库的事务执行不会管备库的同步进度，如果备库落后，主库不幸crash，那么就会导致数据丢失。</li>
+</ul>
+<h2 id="2、同步复制-gt-5-7-："><a href="#2、同步复制-gt-5-7-：" class="headerlink" title="2、同步复制 (&gt;=5.7)："></a>2、同步复制 (&gt;=5.7)：</h2><p>全同步复制，当主库提交事务之后，所有的从库节点必须收到、APPLY并且提交这些事务，然后主库线程才能继续做后续操作。但缺点是，主库完成一个事务的时间会被拉长，性能降低。</p>
+<h2 id="3、半同步复制-gt-5-5-："><a href="#3、半同步复制-gt-5-5-：" class="headerlink" title="3、半同步复制 (&gt;=5.5)："></a>3、半同步复制 (&gt;=5.5)：</h2><ul>
+<li>半同步复制是由谷歌研发的一种数据库主从复制方式。</li>
+<li>与传统的异步复制相比，半同步复制在多个Slave节点中会选取一个节点进行半同步复制。也就是说，当Master提交一个事务的时候，在这个半同步复制的Slave端返回一个同步完成的Ack包之后，服务器才会向用户返回事务提交成功，而其他的节点则是采用传统的异步复制方式进行同步。</li>
+<li>如果主库在等待备库ack时候，如果超时会退化为异步，这就可能导致数据丢失。</li>
+</ul>
+<p>rpl_semi_sync_master_wait_point、sync_binlog、sync_relay_log配置半同步</p>
+<p>rpl_semi_sync_master_wait_point的配置：</p>
+<p>WAIT_AFTER_COMMIT：</p>
+<p><img src="http://ata2-img.cn-hangzhou.img-pub.aliyun-inc.com/4153fcafc3c14bfa7ff94770d41b49a5.png"></p>
+<p>如上图所示。即在等待Slave ACK时候，虽然没有返回当前客户端，但事务已经提交，其他客户端会读取到已提交事务。如果Slave端还没有读到该事务的events，同时主库发生了crash，然后切换到备库。那么之前读到的事务就不见了，出现了幻读</p>
+<p>WAIT_AFTER_SYNC：</p>
+<p><img src="http://ata2-img.cn-hangzhou.img-pub.aliyun-inc.com/08b666b3acb193dc1a0aa5ca506a345c.png"></p>
+<p>在调用binlog sync之后，engine层commit之前等待Slave ACK。这样只有在确认Slave收到事务events后，事务才会提交。在commit之前等待Slave ACK，同时可以堆积事务，利于group commit（一次ack多个事务），有利于提升性能。</p>
+<p>使用方式：</p>
+<p>主库要安装插件，并启用之：</p>
+<pre><code>INSTALL PLUGIN rpl_semi_sync_master SONAME &#39;semisync_master.so&#39;;
+SET GLOBAL VARIABLES rpl_semi_sync_master_enabled=1;
+</code></pre>
+<p>从库也一样：</p>
+<pre><code>mysql&gt; INSTALL PLUGIN rpl_semi_sync_slave SONAME &#39;semisync_slave.so&#39;;
+mysql&gt; SET GLOBAL VARIABLES rpl_semi_sync_slave_enabled=1;
+</code></pre>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/tags/mysql/" rel="tag"># mysql</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/2019/05/12/epoll/" rel="prev" title="epoll与阻塞非阻塞">
+      <i class="fa fa-chevron-left"></i> epoll与阻塞非阻塞
+    </a></div>
+      <div class="post-nav-item">
+    <a href="/2019/06/08/redis_master_slave_replication/" rel="next" title="redis的主从复制">
+      redis的主从复制 <i class="fa fa-chevron-right"></i>
+    </a></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+          <div class="post-toc motion-element"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#1%E3%80%81binlog%E6%96%87%E4%BB%B6"><span class="nav-number">1.</span> <span class="nav-text">1、binlog文件</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#2%E3%80%81%E4%B8%BB%E4%BB%8E%E5%90%8C%E6%AD%A5%E7%9A%84%E8%BF%87%E7%A8%8B"><span class="nav-number">2.</span> <span class="nav-text">2、主从同步的过程</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#3%E3%80%81%E4%B8%BB%E4%BB%8E%E5%90%8C%E6%AD%A5%E7%9A%84%E6%96%B9%E5%BC%8F"><span class="nav-number">3.</span> <span class="nav-text">3、主从同步的方式</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#1%E3%80%81%E8%AF%AD%E5%8F%A5%E5%A4%8D%E5%88%B6"><span class="nav-number">3.1.</span> <span class="nav-text">1、语句复制</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#2%E3%80%81%E8%A1%8C%E5%A4%8D%E5%88%B6"><span class="nav-number">3.2.</span> <span class="nav-text">2、行复制</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#4%E3%80%81%E4%B8%BB%E4%BB%8E%E5%90%8C%E6%AD%A5"><span class="nav-number">4.</span> <span class="nav-text">4、主从同步</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#1%E3%80%81%E5%BC%82%E6%AD%A5%E5%A4%8D%E5%88%B6%EF%BC%9A"><span class="nav-number">4.1.</span> <span class="nav-text">1、异步复制：</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#2%E3%80%81%E5%90%8C%E6%AD%A5%E5%A4%8D%E5%88%B6-gt-5-7-%EF%BC%9A"><span class="nav-number">4.2.</span> <span class="nav-text">2、同步复制 (&gt;&#x3D;5.7)：</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#3%E3%80%81%E5%8D%8A%E5%90%8C%E6%AD%A5%E5%A4%8D%E5%88%B6-gt-5-5-%EF%BC%9A"><span class="nav-number">4.3.</span> <span class="nav-text">3、半同步复制 (&gt;&#x3D;5.5)：</span></a></li></ol></li></ol></div>
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+  <p class="site-author-name" itemprop="name">bojiang</p>
+  <div class="site-description" itemprop="description"></div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">13</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+        <span class="site-state-item-count">2</span>
+        <span class="site-state-item-name">categories</span>
+      </div>
+      <div class="site-state-item site-state-tags">
+        <span class="site-state-item-count">7</span>
+        <span class="site-state-item-name">tags</span>
+      </div>
+  </nav>
+</div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+
+<div class="copyright">
+  
+  &copy; 
+  <span itemprop="copyrightYear">2021</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">bojiang</span>
+</div>
+  <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://muse.theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Muse</a>
+  </div>
+
+        
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+<script src="/js/motion.js"></script>
+
+
+<script src="/js/schemes/muse.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+</body>
+</html>
