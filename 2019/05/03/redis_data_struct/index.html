@@ -22,17 +22,18 @@
 
   <meta name="description" content="set： 当只有少量数字的时候，set是基于intset实现的。当数据量大了，或者有字符存在的时候，基于dict实现，其中value为null">
 <meta property="og:type" content="article">
-<meta property="og:title" content="江波的blog">
-<meta property="og:url" content="https://jiangbo9510.github.io/2021/02/05/redis_data_struct/index.html">
+<meta property="og:title" content="redis的数据结构">
+<meta property="og:url" content="https://jiangbo9510.github.io/2019/05/03/redis_data_struct/index.html">
 <meta property="og:site_name" content="江波的blog">
 <meta property="og:description" content="set： 当只有少量数字的时候，set是基于intset实现的。当数据量大了，或者有字符存在的时候，基于dict实现，其中value为null">
 <meta property="og:locale">
-<meta property="article:published_time" content="2021-02-05T12:35:32.222Z">
-<meta property="article:modified_time" content="2019-05-06T14:59:44.778Z">
+<meta property="article:published_time" content="2019-05-02T16:00:00.000Z">
+<meta property="article:modified_time" content="2021-02-05T14:22:06.064Z">
 <meta property="article:author" content="bojiang">
+<meta property="article:tag" content="redis">
 <meta name="twitter:card" content="summary">
 
-<link rel="canonical" href="https://jiangbo9510.github.io/2021/02/05/redis_data_struct/">
+<link rel="canonical" href="https://jiangbo9510.github.io/2019/05/03/redis_data_struct/">
 
 
 <script id="page-configurations">
@@ -45,7 +46,7 @@
   };
 </script>
 
-  <title> | 江波的blog</title>
+  <title>redis的数据结构 | 江波的blog</title>
   
 
 
@@ -150,7 +151,7 @@
   
   
   <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-Hans">
-    <link itemprop="mainEntityOfPage" href="https://jiangbo9510.github.io/2021/02/05/redis_data_struct/">
+    <link itemprop="mainEntityOfPage" href="https://jiangbo9510.github.io/2019/05/03/redis_data_struct/">
 
     <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
       <meta itemprop="image" content="/images/avatar.gif">
@@ -163,7 +164,7 @@
     </span>
       <header class="post-header">
         <h1 class="post-title" itemprop="name headline">
-          
+          redis的数据结构
         </h1>
 
         <div class="post-meta">
@@ -173,15 +174,24 @@
               </span>
               <span class="post-meta-item-text">Posted on</span>
 
-              <time title="Created: 2021-02-05 20:35:32" itemprop="dateCreated datePublished" datetime="2021-02-05T20:35:32+08:00">2021-02-05</time>
+              <time title="Created: 2019-05-03 00:00:00" itemprop="dateCreated datePublished" datetime="2019-05-03T00:00:00+08:00">2019-05-03</time>
             </span>
               <span class="post-meta-item">
                 <span class="post-meta-item-icon">
                   <i class="far fa-calendar-check"></i>
                 </span>
                 <span class="post-meta-item-text">Edited on</span>
-                <time title="Modified: 2019-05-06 22:59:44" itemprop="dateModified" datetime="2019-05-06T22:59:44+08:00">2019-05-06</time>
+                <time title="Modified: 2021-02-05 22:22:06" itemprop="dateModified" datetime="2021-02-05T22:22:06+08:00">2021-02-05</time>
               </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/2019/" itemprop="url" rel="index"><span itemprop="name">2019</span></a>
+                </span>
+            </span>
 
           
 
@@ -204,6 +214,9 @@
     
 
       <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/tags/redis/" rel="tag"># redis</a>
+          </div>
 
         
 
@@ -211,10 +224,13 @@
         
     <div class="post-nav">
       <div class="post-nav-item">
-    <a href="/2021/01/30/leetcode_1552/" rel="prev" title="leetCode 1552题">
-      <i class="fa fa-chevron-left"></i> leetCode 1552题
+    <a href="/2019/05/03/redis_memory/" rel="prev" title="redis的内存优化">
+      <i class="fa fa-chevron-left"></i> redis的内存优化
     </a></div>
-      <div class="post-nav-item"></div>
+      <div class="post-nav-item">
+    <a href="/2019/05/03/escape_character/" rel="next" title="关于转义字符">
+      关于转义字符 <i class="fa fa-chevron-right"></i>
+    </a></div>
     </div>
       </footer>
     
